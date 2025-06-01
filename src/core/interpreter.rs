@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use crate::core::parser::Expr;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Nil,
     String(String),
@@ -68,6 +68,7 @@ impl Interpreter {
                         match value {
                             Value::Number(n) => result = Value::Number(*n),
                             Value::String(s) => result = Value::String(String::from(s)),
+                            Value::Array(arr) => result = Value::Array(arr.iter().cloned().collect()),
                             _ => continue
                         }
                     }
@@ -100,6 +101,12 @@ impl Interpreter {
                                     let value = self.compute(&mut std::iter::once(v).peekable());
                                     self.env.variables.insert(name.to_string(), value);
                                 }
+                            }
+                        },
+                        Expr::Symbol(s) if s == "len" => {
+                            let arg1 = self.compute(&mut args);
+                            if let Value::Array(arr) = arg1 {
+                                result = Value::Number(arr.len() as f32);
                             }
                         }
                         _ => continue

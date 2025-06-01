@@ -3,7 +3,10 @@ use vega::core::lexer::{Lexer, Token};
 use vega::core::parser::{Expr, Parser};
 
 fn main() {
-    evaluate("(let a 5) (print [a (* a a) (* a a a)])");
+    evaluate("\
+    (let a [1 2 3])\
+    (let size (len a))\
+    (print (* size size))"); // -> Returns 9
 }
 
 fn evaluate(input: &str) {
