@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::Peekable;
+use std::ops::Deref;
 use std::rc::Rc;
 use crate::core::parser::Expr;
 
@@ -15,7 +16,14 @@ pub enum Value {
         params: Vec<String>,
         body: Box<Expr>,
         func_env: Rc<RefCell<Env>>,
+        annotations: Vec<Annotation>,
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Annotation {
+    Require(Expr),
+    Test {args: Vec<Expr>, expected: Expr}
 }
 
 impl Value {
@@ -121,7 +129,7 @@ impl Interpreter {
                         Expr::Symbol(s) if s == "/" => {
                             let mut i = std::iter::once(&e[1]).peekable();
                             match self.compute(&mut i, env.clone()) {
-                                Value::Number(n ) => result = self.numeric_fold(&e[1..], env.clone(), |a, b| a / b, None),
+                                Value::Number(_) => result = self.numeric_fold(&e[1..], env.clone(), |a, b| a / b, None),
                                 _ => panic!("Invalid operands for division !")
                             }
                         },
@@ -194,7 +202,7 @@ impl Interpreter {
                             }
                         },
                         Expr::Symbol(s) if s == "fn" => {
-                            if let (Expr::Symbol(fn_name), Expr::List(fn_args), body_expr) = (&e[1], &e[2], &e[3]) {
+                            if let (Expr::Symbol(fn_name), Expr::List(fn_args), body_expr) = (&e[1], &e[2], &e[3..]) {
                                 let function_name = fn_name.to_string();
 
                                 let function_arguments: Vec<String> = fn_args.iter().filter_map(|arg| {
@@ -204,17 +212,47 @@ impl Interpreter {
                                         None
                                     }
                                 }).collect();
+                                
+                                let mut annotations: Vec<Annotation> = Vec::new();
+                                for expr in body_expr {
+                                    if let Expr::List(dir) = expr {
+                                        if let Expr::Symbol(name) = &dir[0] {
+                                            if name.chars().next() == Some(':') {
+                                                match name.as_str() {
+                                                    ":require" => 
+                                                        annotations.push(Annotation::Require(dir[1].clone())),
+                                                    ":test" =>
+                                                        {
+                                                            let args = dir[1].clone();
+                                                            if let Expr::List(args) = args {
+                                                                annotations.push(
+                                                                    Annotation::Test{
+                                                                        args,
+                                                                        expected: dir[2].clone(),
+                                                                    }
+                                                                )
+                                                            }
+                                                        }
+                                                    _ => panic!("Unknown directive {}", name)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                println!("{:?}", annotations);
 
-                                let function_body = Box::new(body_expr.clone());
+                                let function_body = Box::new(body_expr);
 
                                 let captured_env = env.clone();
-
                                 let function = Value::Function {
                                     params: function_arguments,
-                                    body: function_body,
+                                    body: Box::new(function_body.last().clone().unwrap().clone()),
                                     func_env: captured_env,
+                                    annotations,
                                 };
                                 env.borrow_mut().variables.insert(function_name.clone(), function);
+
                                 result = Value::Nil;
                             } else {
                                 panic!("Invalid function definition syntax");
@@ -227,7 +265,7 @@ impl Interpreter {
                             }
                         },
                         Expr::Symbol(s) => {
-                            if let Some(Value::Function { params, body, func_env }) = env.borrow().get(s) {
+                            if let Some(Value::Function { params, body, func_env, annotations: _annotation }) = env.borrow().get(s) {
                                 let params_value: Vec<_> = e[1..]
                                     .iter()
                                     .map(|p| self.compute(&mut std::iter::once(p).peekable(), env.clone()))

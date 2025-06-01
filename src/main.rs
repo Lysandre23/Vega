@@ -5,12 +5,13 @@ use vega::core::parser::{Expr, Parser};
 fn main() {
     evaluate("\
     (fn fact (n)
-    (do
-      (print n)
-      (if (== n 1)
-          1
-          (* n (fact (- n 1))))
-      )
+        (:require (> n 0))
+        (:test (5) 120)
+        (do
+            (if (== n 1)
+                1
+                (* n (fact (- n 1))))
+        )
     )
     (print (fact 5))
     ");
