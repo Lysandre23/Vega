@@ -4,15 +4,16 @@ use vega::core::parser::{Expr, Parser};
 
 fn main() {
     evaluate("\
-    (if (== 5 5)
+    (fn fact (n)
     (do
-        (print 1)
-        (print 2)    
+      (print n)
+      (if (== n 1)
+          1
+          (* n (fact (- n 1))))
+      )
     )
-    (do
-        (print 3)
-    )
-    "); // -> Returns 9
+    (print (fact 5))
+    ");
 }
 
 fn evaluate(input: &str) {
