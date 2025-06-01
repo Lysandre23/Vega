@@ -239,19 +239,39 @@ impl Interpreter {
                                         }
                                     }
                                 }
-                                
-                                println!("{:?}", annotations);
 
                                 let function_body = Box::new(body_expr);
 
                                 let captured_env = env.clone();
                                 let function = Value::Function {
-                                    params: function_arguments,
+                                    params: function_arguments.clone(),
                                     body: Box::new(function_body.last().clone().unwrap().clone()),
                                     func_env: captured_env,
-                                    annotations,
+                                    annotations: annotations.clone(),
                                 };
+
                                 env.borrow_mut().variables.insert(function_name.clone(), function);
+                                
+                                // :test
+                                for annotation in annotations {
+                                    if let Annotation::Test {args, expected} = annotation {
+                                        let test_env = Rc::new(RefCell::new(Env {
+                                            variables: Default::default(),
+                                            parent: Some(env.clone()),
+                                        }));
+                                        for (arg, value) in function_arguments.iter().zip(args) {
+                                           test_env.borrow_mut().variables.insert(arg.clone(), self.compute(&mut std::iter::once(&value).peekable(), env.clone()));
+                                        }
+                                        let test_result = self.compute(&mut std::iter::once(function_body.last().unwrap()).peekable(), test_env.clone());
+                                        let expected_result = self.compute(&mut std::iter::once(&expected).peekable(), test_env.clone());
+                                        match (test_result, expected_result) {
+                                            (Value::Number(a), Value::Number(b)) if (a-b).abs() < 0.1 => {/* OK */}
+                                            (Value::Bool(a), Value::Bool(b)) if a == b => {/* OK */}
+                                            (Value::String(a), Value::String(b)) if a == b => {/* OK */}
+                                            _ => panic!("Function {} did not pass the test !", function_name)
+                                        }
+                                    }
+                                }
 
                                 result = Value::Nil;
                             } else {
