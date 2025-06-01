@@ -4,9 +4,15 @@ use vega::core::parser::{Expr, Parser};
 
 fn main() {
     evaluate("\
-    (let a [1 2 3])\
-    (let size (len a))\
-    (print (* size size))"); // -> Returns 9
+    (if (== 5 5)
+    (do
+        (print 1)
+        (print 2)    
+    )
+    (do
+        (print 3)
+    )
+    "); // -> Returns 9
 }
 
 fn evaluate(input: &str) {
@@ -19,7 +25,7 @@ fn evaluate(input: &str) {
         println!("{:?}", expr);
     }*/
     let mut interpreter = Interpreter::new();
-    interpreter.compute(&mut exprs.iter().peekable());
+    interpreter.compute(&mut exprs.iter().peekable(), interpreter.env.clone());
     /*println!("--------------------");
     for a in interpreter.env.variables {
         println!("{:?}", a);
