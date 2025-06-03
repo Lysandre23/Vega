@@ -5,8 +5,18 @@ use vega::core::parser::{Parser};
 
 fn main() {
     evaluate("\
-    (var a 5)
-    (print a)
+    (fn area (w h)
+        (:test (4 5) 20)
+        (* w h)
+    )
+    (print \"Enter rect width :\")
+    (var width (parse read))
+    (print \"Enter rect height :\")
+    (var height (parse read))
+    (print (concat 
+        \"Area of rectangle : \"
+        (area width height)
+    ))
     ");
 }
 

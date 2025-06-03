@@ -39,6 +39,7 @@ impl Value {
                 res.push_str("]");
                 res
             },
+            Value::Nil => String::from("nil"),
             _ => "".to_string()
         }
     }

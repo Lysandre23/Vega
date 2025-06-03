@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::rc::Rc;
 use crate::core::env::Env;
 use crate::core::expr::Expr;
@@ -18,7 +19,10 @@ impl Stdlib {
         let mut map = HashMap::new();
         map.extend(Stdlib::math_symbol()); // -> + - * / ^ > >= < <=
         map.extend(Stdlib::logical_symbol()); // -> && || != ==
-        map.extend(Stdlib::io_functions()); // -> print, read
+        map.extend(Stdlib::io_functions()); // -> print read
+        map.extend(Stdlib::language_functions()); // -> typeof
+        map.extend(Stdlib::array_functions()); // -> len get
+        map.extend(Stdlib::string_functions()); // -> parse
         map
     }
 
@@ -96,6 +100,13 @@ impl Stdlib {
             }
         }
         )));
+        map.insert("abs".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            if let Some(Value::Number(n)) = args.get(0) {
+                Value::Number(n.abs())
+            } else {
+                panic!("abs expects a number")
+            }
+        })));
         map
     }
     fn logical_symbol() -> HashMap<String, Value> {
@@ -134,19 +145,106 @@ impl Stdlib {
                 }
             }
         )));
+        map.insert("not".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            if let Some(Value::Bool(b)) = args.get(0) {
+                Value::Bool(!b)
+            } else {
+                panic!("not expects a boolean")
+            }
+        })));
         map
     }
-
     fn io_functions() -> HashMap<String, Value> {
         let mut map = HashMap::new();
         map.insert("print".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
-            println!("{}", args.get(0).unwrap().to_string());
+            for val in args {
+                print!("{} ", val.to_string());
+            }
+            println!();
             Value::Nil
         })));
         map.insert("read".to_string(), Value::NativeFunction(NativeFunction::Pure(|_| {
             let mut line = String::new();
             let _ = std::io::stdin().read_line(&mut line).unwrap();
-            Value::String(line)
+            Value::String(line.trim_end().to_string())
+        })));
+        map
+    }
+    fn language_functions() -> HashMap<String, Value> {
+        let mut map = HashMap::new();
+        map.insert("typeof".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            return match args.first() { 
+                Some(Value::Number(_)) => Value::String("Number".to_string()),
+                Some(Value::String(_)) => Value::String("String".to_string()),
+                Some(Value::Array(_)) => Value::String("Array".to_string()),
+                Some(Value::Function { params: _, body: _, func_env: _, annotations: _ }) => Value::String("Function".to_string()),
+                Some(Value::NativeFunction(_)) => Value::String("Function".to_string()),
+                Some(Value::Bool(_)) => Value::String("Bool".to_string()),
+                _ => panic!("typeof misses parameters !")
+            }
+        })));
+        map
+    }
+    fn array_functions() -> HashMap<String, Value> {
+        let mut map = HashMap::new();
+        map.insert("len".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            return match args.get(0) {
+                Some(Value::Array(arr)) => Value::Number(arr.len() as f32),
+                Some(Value::String(s)) => Value::Number(s.chars().count() as f32),
+                _ => panic!("Type has no length !")
+            }
+        })));
+        map.insert("get".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            if args.len() != 2 {
+                panic!("get expects exactly two arguments");
+            }
+
+            let index = match args.get(1) {
+                Some(Value::Number(n)) => *n as usize,
+                _ => panic!("Second argument to get must be a number (index)"),
+            };
+
+            match args.get(0) {
+                Some(Value::Array(arr)) => {
+                    arr.get(index).cloned().unwrap_or(Value::Nil)
+                },
+                Some(Value::String(s)) => {
+                    s.chars().nth(index)
+                        .map(|c| Value::String(c.to_string()))
+                        .unwrap_or(Value::Nil)
+                },
+                _ => panic!("get only supports arrays and strings"),
+            }
+        })));
+        map.insert("concat".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            if args.len() == 0 {
+                return Value::Nil;
+            }
+            return match args[0] { 
+                Value::String(_) => {
+                    let mut result = String::new();
+                    for arg in args.iter() {
+                        result.push_str(&arg.to_string());
+                    }
+                    Value::String(result)
+                }
+                _ => Value::Nil,
+            }
+        })));
+        map
+    }
+    fn string_functions() -> HashMap<String, Value> {
+        let mut map = HashMap::new();
+        map.insert("parse".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            return match args.get(0) {
+                Some(Value::String(s)) => {
+                    match s.parse::<f32>() {
+                        Ok(f) => Value::Number(f),
+                        Err(_) => Value::Nil,
+                    }
+                },
+                _ => Value::Nil,
+            }
         })));
         map
     }
