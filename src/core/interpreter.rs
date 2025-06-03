@@ -1,80 +1,12 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::Peekable;
-use std::ops::Deref;
 use std::rc::Rc;
+use crate::core::annotation::Annotation;
+use crate::core::env::Env;
 use crate::core::parser::Expr;
-
-#[derive(Debug, Clone)]
-pub enum Value {
-    Nil,
-    String(String),
-    Number(f32),
-    Bool(bool),
-    Array(Vec<Value>),
-    Function {
-        params: Vec<String>,
-        body: Box<Expr>,
-        func_env: Rc<RefCell<Env>>,
-        annotations: Vec<Annotation>,
-    }
-}
-
-#[derive(Debug, Clone)]
-pub enum Annotation {
-    Require(Expr),
-    Test {args: Vec<Expr>, expected: Expr}
-}
-
-impl Value {
-    fn to_string(&self) -> String {
-        match self {
-            //Value::Nil => "nil".to_string(),
-            Value::String(s) => s.clone(),
-            Value::Number(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Array(arr) => {
-                let mut res = String::from("[");
-                for v in arr {
-                    res.push_str(&v.to_string());
-                    res.push(' ');
-                }
-                res.pop();
-                res.push_str("]");
-                res
-            },
-            _ => "".to_string()
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Env {
-    pub variables: HashMap<String, Value>,
-    pub parent: Option<Rc<RefCell<Env>>>
-}
-
-impl Env {
-    pub fn get(&self, key: &str) -> Option<Value> {
-        if let Some(val) = self.variables.get(key) {
-            Some(val.clone())
-        } else if let Some(parent) = &self.parent.clone() {
-            parent.borrow().get(key)
-        } else {
-            return None;
-        }
-    }
-
-    pub fn set(&mut self, key: &str, value: Value) {
-        if let Some(val) = self.variables.get_mut(key) {
-            *val = value;
-        } else if let Some(parent) = &self.parent.clone() {
-            parent.borrow_mut().set(key, value);
-        } else {
-            panic!("Variable {} not found", key);
-        }
-    }
-}
+use crate::core::stdlib::{NativeFunction, Stdlib};
+use crate::core::value::Value;
 
 pub struct Interpreter {
     pub env: Rc<RefCell<Env>>,
@@ -82,37 +14,23 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Interpreter { env: Rc::new(RefCell::new(Env { variables: HashMap::new(), parent: None })) }
+        let mut base = Env {
+            variables: HashMap::new(),
+            parent: None,
+        };
+        base.variables.extend(Stdlib::builtins());
+        Interpreter {
+            env: Rc::new(RefCell::new(base)),
+        }
     }
     pub fn compute<'a>(&mut self, exprs: &mut Peekable<impl Iterator<Item = &'a Expr>>, env: Rc<RefCell<Env>>) -> Value  {
         let mut result: Value = Value::Nil;
         while let Some(expr) = exprs.next() {
             match expr {
-                Expr::Number(n) => result = Value::Number(*n),
-                Expr::String(s) => result = Value::String(String::from(s)),
-                Expr::Array(arr) => {
-                    let mut values: Vec<Value> = Vec::new();
-                    for a in arr {
-                        let mut i = std::iter::once(a).peekable();
-                        let v = self.compute(&mut i, env.clone());
-                        values.push(v);
-                    }
-                    result = Value::Array(values);
-                }
-                Expr::Symbol(s) => {
-                    let env_rc = env.clone();
-                    let env = env_rc.borrow();
-                    if let Some(_) = env.get(s) {
-                        let value = env.variables.get(s).unwrap();
-                        match value {
-                            Value::Number(n) => result = Value::Number(*n),
-                            Value::String(s) => result = Value::String(String::from(s)),
-                            Value::Array(arr) => result = Value::Array(arr.iter().cloned().collect()),
-                            Value::Bool(b) => result = Value::Bool(*b),
-                            _ => result = Value::Nil
-                        }
-                    }
-                },
+                Expr::Number(n) => result = self.handle_number(*n),
+                Expr::String(s) => result = self.handle_string(s.clone()),
+                Expr::Array(arr) => result = self.handle_array(arr.clone(), env.clone()),
+                Expr::Symbol(s) => result = self.handle_symbol(s.to_string(), env.clone()),
                 Expr::List(e) => {
                     if e.len() == 1 {
                         result = self.compute(&mut std::iter::once(&e[0]).peekable(), env.clone());
@@ -120,25 +38,6 @@ impl Interpreter {
                     }
                     let mut args = e[1..e.len()].into_iter().peekable();
                     match &e[0] {
-                        Expr::Symbol(s) if s == "+" => 
-                            result = self.numeric_fold(&e[1..], env.clone(), |a, b| a + b, Some(0.0)),
-                        Expr::Symbol(s) if s == "-" =>
-                            result = self.numeric_fold(&e[1..], env.clone(), |a, b| a - b, None),
-                        Expr::Symbol(s) if s == "*" =>
-                            result = self.numeric_fold(&e[1..], env.clone(), |a, b| a * b, Some(1.0)),
-                        Expr::Symbol(s) if s == "/" => {
-                            let mut i = std::iter::once(&e[1]).peekable();
-                            match self.compute(&mut i, env.clone()) {
-                                Value::Number(_) => result = self.numeric_fold(&e[1..], env.clone(), |a, b| a / b, None),
-                                _ => panic!("Invalid operands for division !")
-                            }
-                        },
-                        Expr::Symbol(s) if s == ">" => result = self.binary_operator(env.clone(),|a, b| a > b, &e[1], &e[2]),
-                        Expr::Symbol(s) if s == "<" => result = self.binary_operator(env.clone(),|a, b| a < b, &e[1], &e[2]),
-                        Expr::Symbol(s) if s == "==" => result = self.binary_operator(env.clone(),|a, b| a == b, &e[1], &e[2]),
-                        Expr::Symbol(s) if s == "!=" => result = self.binary_operator(env.clone(),|a, b| a != b, &e[1], &e[2]),
-                        Expr::Symbol(s) if s == ">=" => result = self.binary_operator(env.clone(),|a, b| a >= b, &e[1], &e[2]),
-                        Expr::Symbol(s) if s == "<=" => result = self.binary_operator(env.clone(),|a, b| a <= b, &e[1], &e[2]),
                         Expr::Symbol(s) if s == "do" => {
                             for arg in args {
                                 let mut i = std::iter::once(arg).peekable();
@@ -158,10 +57,6 @@ impl Interpreter {
                             } else {
                                 result = Value::Nil;
                             }
-                        },
-                        Expr::Symbol(s) if s == "print" => {
-                            let arg1: Value = self.compute(&mut args, env.clone());
-                            println!("{}", arg1.to_string());
                         },
                         Expr::Symbol(s) if s == "var" => {
                             let arg1 = args.next();
@@ -212,21 +107,21 @@ impl Interpreter {
                                         None
                                     }
                                 }).collect();
-                                
+
                                 let mut annotations: Vec<Annotation> = Vec::new();
                                 for expr in body_expr {
                                     if let Expr::List(dir) = expr {
                                         if let Expr::Symbol(name) = &dir[0] {
                                             if name.chars().next() == Some(':') {
                                                 match name.as_str() {
-                                                    ":require" => 
+                                                    ":require" =>
                                                         annotations.push(Annotation::Require(dir[1].clone())),
                                                     ":test" =>
                                                         {
                                                             let args = dir[1].clone();
                                                             if let Expr::List(args) = args {
                                                                 annotations.push(
-                                                                    Annotation::Test{
+                                                                    Annotation::Test {
                                                                         args,
                                                                         expected: dir[2].clone(),
                                                                     }
@@ -251,23 +146,23 @@ impl Interpreter {
                                 };
 
                                 env.borrow_mut().variables.insert(function_name.clone(), function);
-                                
+
                                 // :test
                                 for annotation in annotations {
-                                    if let Annotation::Test {args, expected} = annotation {
+                                    if let Annotation::Test { args, expected } = annotation {
                                         let test_env = Rc::new(RefCell::new(Env {
                                             variables: Default::default(),
                                             parent: Some(env.clone()),
                                         }));
                                         for (arg, value) in function_arguments.iter().zip(args) {
-                                           test_env.borrow_mut().variables.insert(arg.clone(), self.compute(&mut std::iter::once(&value).peekable(), env.clone()));
+                                            test_env.borrow_mut().variables.insert(arg.clone(), self.compute(&mut std::iter::once(&value).peekable(), env.clone()));
                                         }
                                         let test_result = self.compute(&mut std::iter::once(function_body.last().unwrap()).peekable(), test_env.clone());
                                         let expected_result = self.compute(&mut std::iter::once(&expected).peekable(), test_env.clone());
                                         match (test_result, expected_result) {
-                                            (Value::Number(a), Value::Number(b)) if (a-b).abs() < 0.1 => {/* OK */}
-                                            (Value::Bool(a), Value::Bool(b)) if a == b => {/* OK */}
-                                            (Value::String(a), Value::String(b)) if a == b => {/* OK */}
+                                            (Value::Number(a), Value::Number(b)) if (a - b).abs() < 0.1 => { /* OK */ }
+                                            (Value::Bool(a), Value::Bool(b)) if a == b => { /* OK */ }
+                                            (Value::String(a), Value::String(b)) if a == b => { /* OK */ }
                                             _ => panic!("Function {} did not pass the test !", function_name)
                                         }
                                     }
@@ -278,14 +173,19 @@ impl Interpreter {
                                 panic!("Invalid function definition syntax");
                             }
                         },
-                        Expr::Symbol(s) if s == "len" => {
-                            let arg1 = self.compute(&mut args, env.clone());
-                            if let Value::Array(arr) = arg1 {
-                                result = Value::Number(arr.len() as f32);
-                            }
-                        },
                         Expr::Symbol(s) => {
-                            if let Some(Value::Function { params, body, func_env, annotations: _annotation }) = env.borrow().get(s) {
+                            if let Some(Value::NativeFunction(f)) = env.borrow().get(s) {
+                                // STDLIB FUNCTION
+                                let arg_values = args
+                                    .into_iter()
+                                    .map(|arg| self.compute(&mut std::iter::once(arg).peekable(), env.clone()))
+                                    .collect::<Vec<Value>>();
+                                match f {
+                                    NativeFunction::Pure(fp) => result = fp(arg_values),
+                                    NativeFunction::WithEnv(fwe) => result = fwe(arg_values, env.clone())
+                                }
+                            }else if let Some(Value::Function { params, body, func_env, annotations: _annotation }) = env.borrow().get(s) {
+                                // USER DEFINED FUNCTION
                                 let params_value: Vec<_> = e[1..]
                                     .iter()
                                     .map(|p| self.compute(&mut std::iter::once(p).peekable(), env.clone()))
@@ -306,51 +206,48 @@ impl Interpreter {
                                 panic!("Undefined function: {}", s);
                             }
                         }
-                        _ => continue
+                        _ => panic!("Invalid function definition syntax"),
                     }
-                },
+                }
             }
         }
         result
     }
 
-    fn numeric_fold<F>(&mut self, exprs: &[Expr], env: Rc<RefCell<Env>>, operator: F, init: Option<f32>) -> Value
-    where
-        F: Fn(f32, f32) -> f32,
-    {
-        let mut exprs_iter = exprs.iter();
-        let first_value = if let Some(i) = init {
-            i
-        } else if let Some(first_expr) = exprs_iter.next() {
-            if let Value::Number(n) = self.compute(&mut std::iter::once(first_expr).peekable(), env.clone()) {
-                n
-            } else {
-                panic!("Expected number as first operand")
-            }
-        } else {
-            panic!("Expected at least one argument")
-        };
+      ////////////////
+     //  HANDLERS  //  -> When matching an Expr in self.compute
+    ////////////////
 
-        let result = exprs_iter.fold(first_value, |acc, expr| {
-            if let Value::Number(n) = self.compute(&mut std::iter::once(expr).peekable(), env.clone()) {
-                operator(acc, n)
-            } else {
-                panic!("Expected number")
-            }
-        });
-
-        Value::Number(result)
+    fn handle_number(&mut self, n: f32) -> Value {
+        Value::Number(n)
     }
 
-    fn binary_operator<F>(&mut self, env: Rc<RefCell<Env>>, operator: F, o1: &Expr, o2: &Expr) -> Value
-        where F: Fn(f32, f32) -> bool
-    {
-        let mut result: bool = false;
-        let i1 = self.compute(&mut std::iter::once(o1).peekable(), env.clone());
-        let i2 = self.compute(&mut std::iter::once(o2).peekable(), env.clone());
-        if let (Value::Number(n1), Value::Number(n2)) = (i1, i2) {
-            result = operator(n1, n2);
+    fn handle_string(&mut self, s: String) -> Value {
+        Value::String(String::from(s))
+    }
+
+    fn handle_array(&mut self, arr: Vec<Expr>, env: Rc<RefCell<Env>>) -> Value {
+        let mut values: Vec<Value> = Vec::new();
+        for a in arr {
+            let mut i = std::iter::once(&a).peekable();
+            let v = self.compute(&mut i, env.clone());
+            values.push(v);
         }
-        Value::Bool(result)
+        Value::Array(values)
+    }
+
+    fn handle_symbol(&mut self, s: String, env: Rc<RefCell<Env>>) -> Value {
+        let env_rc = env.clone();
+        let e = env_rc.borrow();
+        if let Some(Value::NativeFunction(f)) = e.get(&*s) {
+            return match f {
+                NativeFunction::Pure(fp) => fp(vec![]),
+                NativeFunction::WithEnv(fwe) => fwe(vec![], env.clone())
+            }
+        } else if let Some(_) = e.get(&*s) {
+            let value = e.variables.get(&s).unwrap();
+            return value.clone();
+        }
+        Value::Nil
     }
 }

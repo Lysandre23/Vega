@@ -1,19 +1,12 @@
+use vega::core::expr::Expr;
 use vega::core::interpreter::Interpreter;
 use vega::core::lexer::{Lexer, Token};
-use vega::core::parser::{Expr, Parser};
+use vega::core::parser::{Parser};
 
 fn main() {
     evaluate("\
-    (fn fact (n)
-        (:require (> n 0))
-        (:test (5) 120)
-        (do
-            (if (== n 1)
-                1
-                (* n (fact (- n 1))))
-        )
-    )
-    (print (fact 5))
+    (var a 5)
+    (print a)
     ");
 }
 
