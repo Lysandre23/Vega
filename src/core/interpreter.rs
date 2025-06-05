@@ -1,6 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::Peekable;
+use std::ops::Deref;
 use std::rc::Rc;
 use crate::core::annotation::Annotation;
 use crate::core::env::Env;
@@ -67,6 +68,49 @@ impl Interpreter {
                                     env.clone().borrow_mut().variables.insert(name.to_string(), value);
                                 }
                             }
+                        },
+                        Expr::Symbol(s) if s == "for" => {
+                            let local_env = Rc::new(RefCell::new(
+                               Env {
+                                   variables: Default::default(),
+                                   parent: Some(env.clone())
+                               }
+                            ));
+                            let mut p: Vec<String> = Vec::new();
+                            let mut r: Vec<Vec<f32>> = Vec::new();
+                            if let Some(Expr::List(params)) = args.next() {
+                                for param in params {
+                                    if let Expr::Symbol(param_name) = &*param {
+                                        p.push(param_name.to_string());
+                                    }
+                                }
+                            }
+                            if let Some(Expr::List(ranges)) = args.next() {
+                                for range in ranges {
+                                    let value_expr = self.compute(&mut std::iter::once(range).peekable(), local_env.clone());
+                                    if let Value::Array(arr) = value_expr {
+                                        let mut values: Vec<f32> = Vec::new();
+                                        for value in arr {
+                                            if let Value::Number(n) = value {
+                                                values.push(n);
+                                            }
+                                        }
+                                        r.push(values);
+                                    }
+                                }
+                            }
+                            let ast = args.next().unwrap();
+                            let max = r.clone().into_iter().map(|n| n.iter().count()).min().unwrap();
+                            for i in 0..max {
+                                for (n,j) in p.iter().zip(0..p.iter().count()) {
+                                    local_env.borrow_mut().variables.insert(
+                                        n.to_string(), 
+                                        Value::Number(r[j][i])
+                                    );
+                                }
+                                self.compute(&mut std::iter::once(ast).peekable(), local_env.clone());
+                            }
+                            
                         },
                         Expr::Symbol(s) if s == "let" => {
                             let local_env = Rc::new(RefCell::new(

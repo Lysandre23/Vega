@@ -173,7 +173,7 @@ impl Stdlib {
     fn language_functions() -> HashMap<String, Value> {
         let mut map = HashMap::new();
         map.insert("typeof".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
-            return match args.first() { 
+            return match args.first() {
                 Some(Value::Number(_)) => Value::String("Number".to_string()),
                 Some(Value::String(_)) => Value::String("String".to_string()),
                 Some(Value::Array(_)) => Value::String("Array".to_string()),
@@ -220,7 +220,7 @@ impl Stdlib {
             if args.len() == 0 {
                 return Value::Nil;
             }
-            return match args[0] { 
+            return match args[0] {
                 Value::String(_) => {
                     let mut result = String::new();
                     for arg in args.iter() {
@@ -229,6 +229,17 @@ impl Stdlib {
                     Value::String(result)
                 }
                 _ => Value::Nil,
+            }
+        })));
+        map.insert("range".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            if let (Some(Value::Number(start)), Some(Value::Number(end))) = (args.get(0), args.get(1)) {
+                let mut vec: Vec<Value> = Vec::new();
+                for i in (*start as i32)..(*end as i32) {
+                    vec.push(Value::Number(i as f32));
+                }
+                Value::Array(vec)
+            } else {
+                panic!("range expects a number argument");
             }
         })));
         map
