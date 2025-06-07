@@ -6,7 +6,8 @@ use crate::core::value::Value;
 #[derive(Debug)]
 pub struct Env {
     pub variables: HashMap<String, Value>,
-    pub parent: Option<Rc<RefCell<Env>>>
+    pub parent: Option<Rc<RefCell<Env>>>,
+    pub classes: HashMap<String, Vec<String>>
 }
 
 impl Env {
@@ -27,6 +28,16 @@ impl Env {
             parent.borrow_mut().set(key, value);
         } else {
             panic!("Variable {} not found", key);
+        }
+    }
+    
+    pub fn class_exists(&self, name: &str) -> Option<Vec<String>> {
+        if let Some(val) = self.classes.get(name) {
+            Some(val.clone())
+        } else if let Some(parent) = &self.parent.clone() {
+            parent.borrow().class_exists(name)
+        } else {
+            None
         }
     }
 }

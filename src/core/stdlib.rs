@@ -45,11 +45,11 @@ impl Stdlib {
             }
         )));
         map.insert("*".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
-                if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.get(0), args.get(1)) {
-                    Value::Number(a * b)
-                } else {
-                    panic!("< * > only apply on two numbers !")
-                }
+            if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.get(0), args.get(1)) {
+                Value::Number(a * b)
+            } else {
+                panic!("< * > only apply on two numbers !")
+            }
             }
         )));
         map.insert("/".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
@@ -183,6 +183,44 @@ impl Stdlib {
                 _ => panic!("typeof misses parameters !")
             }
         })));
+        map.insert("get".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+            match args.get(0) {
+                Some(Value::Array(arr)) => {
+                    let index = match args.get(1) {
+                        Some(Value::Number(n)) => *n as usize,
+                        _ => panic!("Second argument to get must be a number (index)"),
+                    };
+                    arr.get(index).cloned().unwrap_or(Value::Nil)
+                },
+                Some(Value::String(s)) => {
+                    let index = match args.get(1) {
+                        Some(Value::Number(n)) => *n as usize,
+                        _ => panic!("Second argument to get must be a number (index)"),
+                    };
+                    s.chars().nth(index)
+                        .map(|c| Value::String(c.to_string()))
+                        .unwrap_or(Value::Nil)
+                },
+                Some(Value::Object{class, attrs}) => {
+                    let key = args.get(1).unwrap_or(&Value::Nil);
+                    if let Value::String(s) = key {
+                        if attrs.contains_key(s) {
+                            attrs.get(s).unwrap().clone()
+                        } else {
+                            Value::Nil
+                        }
+                    } else {
+                        Value::Nil
+                    }
+                },
+                _ => panic!("get only supports arrays and strings"),
+            }
+        })));
+        /*map.insert("set".to_string(), Value::NativeFunction(NativeFunction::WithEnv(|args, env| {
+            match args.get(0) {
+                Some(Value::Array(arr)) => {}
+            }
+        })));*/
         map
     }
     fn array_functions() -> HashMap<String, Value> {
@@ -192,28 +230,6 @@ impl Stdlib {
                 Some(Value::Array(arr)) => Value::Number(arr.len() as f32),
                 Some(Value::String(s)) => Value::Number(s.chars().count() as f32),
                 _ => panic!("Type has no length !")
-            }
-        })));
-        map.insert("get".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
-            if args.len() != 2 {
-                panic!("get expects exactly two arguments");
-            }
-
-            let index = match args.get(1) {
-                Some(Value::Number(n)) => *n as usize,
-                _ => panic!("Second argument to get must be a number (index)"),
-            };
-
-            match args.get(0) {
-                Some(Value::Array(arr)) => {
-                    arr.get(index).cloned().unwrap_or(Value::Nil)
-                },
-                Some(Value::String(s)) => {
-                    s.chars().nth(index)
-                        .map(|c| Value::String(c.to_string()))
-                        .unwrap_or(Value::Nil)
-                },
-                _ => panic!("get only supports arrays and strings"),
             }
         })));
         map.insert("concat".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {

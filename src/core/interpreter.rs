@@ -17,6 +17,7 @@ impl Interpreter {
     pub fn new() -> Self {
         let mut base = Env {
             variables: HashMap::new(),
+            classes: HashMap::new(),
             parent: None,
         };
         base.variables.extend(Stdlib::builtins());
@@ -65,7 +66,27 @@ impl Interpreter {
                                 let arg2 = args.next();
                                 if let Some(v) = arg2 {
                                     let value = self.compute(&mut std::iter::once(v).peekable(), env.clone());
-                                    env.clone().borrow_mut().variables.insert(name.to_string(), value);
+                                    if env.borrow_mut().variables.contains_key(name) {
+                                        panic!("Variable {} already defined ! Use set to modify its value.", name);
+                                    } else {
+                                        env.clone().borrow_mut().variables.insert(name.to_string(), value.clone());
+                                        result = value;
+                                    }
+                                }
+                            }
+                        },
+                        Expr::Symbol(s) if s == "struct" => {
+                            let name_expr = args.next().unwrap();
+                            if let Expr::Symbol(name) = name_expr {
+                                let attrs_expr = args.next().unwrap();
+                                let mut attrs: Vec<String> = Vec::new();
+                                if let Expr::List(a) = attrs_expr {
+                                    for i in a {
+                                        if let Expr::Symbol(n) = i {
+                                            attrs.push(n.to_string());
+                                        }
+                                    }
+                                    env.borrow_mut().classes.insert(name.to_string(), attrs);
                                 }
                             }
                         },
@@ -73,6 +94,7 @@ impl Interpreter {
                             let local_env = Rc::new(RefCell::new(
                                Env {
                                    variables: Default::default(),
+                                   classes: Default::default(),
                                    parent: Some(env.clone())
                                }
                             ));
@@ -112,10 +134,13 @@ impl Interpreter {
                             }
                             
                         },
+                        Expr::Symbol(s) if s == "while" => {},
+                        
                         Expr::Symbol(s) if s == "let" => {
                             let local_env = Rc::new(RefCell::new(
                                 Env {
                                     variables: Default::default(),
+                                    classes: Default::default(),
                                     parent: Some(env.clone()),
                                 }
                             ));
@@ -143,7 +168,6 @@ impl Interpreter {
                         Expr::Symbol(s) if s == "fn" => {
                             if let (Expr::Symbol(fn_name), Expr::List(fn_args), body_expr) = (&e[1], &e[2], &e[3..]) {
                                 let function_name = fn_name.to_string();
-
                                 let function_arguments: Vec<String> = fn_args.iter().filter_map(|arg| {
                                     if let Expr::Symbol(name) = arg {
                                         Some(name.clone())
@@ -172,7 +196,7 @@ impl Interpreter {
                                                                 )
                                                             }
                                                         }
-                                                    _ => panic!("Unknown directive {}", name)
+                                                    _ => panic!("Unknown annotation {}", name)
                                                 }
                                             }
                                         }
@@ -196,6 +220,7 @@ impl Interpreter {
                                     if let Annotation::Test { args, expected } = annotation {
                                         let test_env = Rc::new(RefCell::new(Env {
                                             variables: Default::default(),
+                                            classes: Default::default(),
                                             parent: Some(env.clone()),
                                         }));
                                         for (arg, value) in function_arguments.iter().zip(args) {
@@ -211,13 +236,13 @@ impl Interpreter {
                                         }
                                     }
                                 }
-
                                 result = Value::Nil;
                             } else {
                                 panic!("Invalid function definition syntax");
                             }
                         },
                         Expr::Symbol(s) => {
+                            let class_opt = env.borrow_mut().class_exists(s);
                             if let Some(Value::NativeFunction(f)) = env.borrow().get(s) {
                                 // STDLIB FUNCTION
                                 let arg_values = args
@@ -237,6 +262,7 @@ impl Interpreter {
 
                                 let local_env = Rc::new(RefCell::new(Env {
                                     variables: HashMap::new(),
+                                    classes: Default::default(),
                                     parent: Some(func_env.clone()), // closure
                                 }));
 
@@ -246,8 +272,21 @@ impl Interpreter {
 
                                 let mut body_iter = std::iter::once(body.as_ref()).peekable();
                                 result = self.compute(&mut body_iter, local_env);
+                            
+                            } else if let Some(class)= class_opt {
+                                // Class instance
+                                if let Expr::Symbol(name) = args.next().unwrap() {
+                                    if let Expr::List(attrs) = args.next().unwrap() {
+                                        let mut hashmap: HashMap<String, Value> = HashMap::new();
+                                        for (attr_name, attr_value) in class.clone().iter().zip(attrs) {
+                                            let value = self.compute(&mut std::iter::once(attr_value).peekable(), env.clone());
+                                            hashmap.insert(attr_name.clone(), value);
+                                        }
+                                        env.borrow_mut().variables.insert(name.clone(), Value::Object{class: s.clone(), attrs: hashmap});
+                                    }
+                                }
                             } else {
-                                panic!("Undefined function: {}", s);
+                                panic!("Undefined symbol: {}", s);
                             }
                         }
                         _ => panic!("Invalid function definition syntax"),

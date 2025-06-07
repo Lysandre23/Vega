@@ -1,4 +1,6 @@
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::format;
 use std::rc::Rc;
 use crate::core::annotation::Annotation;
 use crate::core::env::Env;
@@ -19,6 +21,7 @@ pub enum Value {
         func_env: Rc<RefCell<Env>>,
         annotations: Vec<Annotation>,
     },
+    Object{class: String, attrs: HashMap<String, Value>},
     NativeFunction(NativeFunction)
 }
 
@@ -37,6 +40,18 @@ impl Value {
                 }
                 res.pop();
                 res.push_str("]");
+                res
+            },
+            Value::Object{class, attrs} => {
+                let mut res = String::from("");
+                res.push_str(&class);
+                res.push_str(" -> ");
+                for (k, v) in attrs {
+                    res.push_str(&k);
+                    res.push('=');
+                    res.push_str(&v.to_string());
+                    res.push_str(" | ");
+                }
                 res
             },
             Value::Nil => String::from("nil"),
