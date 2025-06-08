@@ -1,7 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::iter::Peekable;
-use std::ops::Deref;
 use std::rc::Rc;
 use crate::core::annotation::Annotation;
 use crate::core::env::Env;
@@ -43,6 +42,9 @@ impl Interpreter {
     //     │    Handlers    │
     //     ╰────────────────╯
     fn handle_list(&mut self, e: &Vec<Expr>, env: Rc<RefCell<Env>>) -> Value {
+        if e.len() == 0 {
+            return Value::Nil;
+        }
         if e.len() == 1 {
             return self.compute(&mut std::iter::once(&e[0]).peekable(), env.clone())
         }

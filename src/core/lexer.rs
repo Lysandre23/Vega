@@ -32,7 +32,7 @@ impl Lexer {
                 tokens.push(Token::String(string_lit));
             } else if "()[] \n".contains(c) {
                 if !current.is_empty() {
-                    if current.chars().all(|a| a.is_ascii_digit() || a == '.') {
+                    if current.chars().all(|a| a.is_ascii_digit() || a == '.' || a == '-') {
                         tokens.push(Token::Number(f32::from_str(&current).unwrap()));
                     } else {
                         tokens.push(Token::Identifier(current.clone()));
