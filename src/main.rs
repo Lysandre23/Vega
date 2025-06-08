@@ -1,6 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
-use clap::{arg, Command, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use vega::core::expr::Expr;
 use vega::core::interpreter::Interpreter;
 use vega::core::lexer::{Lexer, Token};

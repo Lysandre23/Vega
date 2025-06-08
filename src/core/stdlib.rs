@@ -1,9 +1,7 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::ops::Deref;
 use std::rc::Rc;
 use crate::core::env::Env;
-use crate::core::expr::Expr;
 use crate::core::value::Value;
 
 #[derive(Debug, Clone)]
@@ -20,8 +18,8 @@ impl Stdlib {
         map.extend(Stdlib::math_symbol()); // -> + - * / ^ > >= < <=
         map.extend(Stdlib::logical_symbol()); // -> && || != ==
         map.extend(Stdlib::io_functions()); // -> print read
-        map.extend(Stdlib::language_functions()); // -> typeof
-        map.extend(Stdlib::array_functions()); // -> len get
+        map.extend(Stdlib::language_functions()); // -> typeof get set
+        map.extend(Stdlib::array_functions()); // -> len
         map.extend(Stdlib::string_functions()); // -> parse
         map
     }
@@ -70,6 +68,7 @@ impl Stdlib {
         )));
         map.insert(">".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
             if let (Some(Value::Number(a)), Some(Value::Number(b))) = (args.get(0), args.get(1)) {
+                println!("{a} {b}");
                 Value::Bool(a > b)
             } else {
                 panic!("> only apply on two numbers !")
@@ -201,7 +200,7 @@ impl Stdlib {
                         .map(|c| Value::String(c.to_string()))
                         .unwrap_or(Value::Nil)
                 },
-                Some(Value::Object{class, attrs}) => {
+                Some(Value::Object{ class: _class, attrs}) => {
                     let key = args.get(1).unwrap_or(&Value::Nil);
                     if let Value::String(s) = key {
                         if attrs.contains_key(s) {
@@ -216,11 +215,6 @@ impl Stdlib {
                 _ => panic!("get only supports arrays and strings"),
             }
         })));
-        /*map.insert("set".to_string(), Value::NativeFunction(NativeFunction::WithEnv(|args, env| {
-            match args.get(0) {
-                Some(Value::Array(arr)) => {}
-            }
-        })));*/
         map
     }
     fn array_functions() -> HashMap<String, Value> {

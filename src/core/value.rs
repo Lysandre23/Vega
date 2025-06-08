@@ -1,11 +1,9 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::format;
 use std::rc::Rc;
 use crate::core::annotation::Annotation;
 use crate::core::env::Env;
 use crate::core::expr::Expr;
-use crate::core::stdlib;
 use crate::core::stdlib::NativeFunction;
 
 #[derive(Debug, Clone)]
