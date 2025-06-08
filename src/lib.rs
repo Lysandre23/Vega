@@ -6,5 +6,6 @@ pub mod core {
     pub mod expr;
     pub mod env;
     pub mod annotation;
+    pub mod pattern;
     pub mod stdlib;
 }

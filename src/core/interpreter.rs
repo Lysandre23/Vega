@@ -5,6 +5,7 @@ use std::rc::Rc;
 use crate::core::annotation::Annotation;
 use crate::core::env::Env;
 use crate::core::parser::Expr;
+use crate::core::pattern::Pattern;
 use crate::core::stdlib::{NativeFunction, Stdlib};
 use crate::core::value::Value;
 
@@ -46,6 +47,11 @@ impl Interpreter {
             return Value::Nil;
         }
         if e.len() == 1 {
+            if let Some(Expr::String(discard)) = e.first() {
+                if discard == "_" {
+                    return Value::Nil;
+                }
+            }
             return self.compute(&mut std::iter::once(&e[0]).peekable(), env.clone())
         }
         let mut result = Value::Nil;
@@ -305,6 +311,47 @@ impl Interpreter {
                         panic!("Variable {} not found", variable);
                     }
                 }
+            },
+            Expr::Symbol(s) if s == "match" => {
+                let value_expr_option = args.next();
+                if let Some(value_expr) = value_expr_option {
+                    let value = self.compute(&mut std::iter::once(value_expr).peekable(), env.clone());
+                    match value {
+                        Value::Array(arr) => {},
+                        Value::Number(n) => {
+                            while let Some(expr) = args.next() {
+                                if let Expr::List(case) = expr {
+                                    let left = case.get(0).unwrap();
+                                    let right = case.get(1).unwrap();
+                                    match self.compute(&mut std::iter::once(left).peekable(), env.clone()) {
+                                        Value::Array(arr) => {
+                                            for a in arr {
+                                                if let Value::Number(i) = a {
+                                                    if i == n {
+                                                        result = self.compute(&mut std::iter::once(right).peekable(), env.clone());
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        Value::Number(l) => {
+                                            if l == n {
+                                                result = self.compute(&mut std::iter::once(right).peekable(), env.clone());
+                                            }
+                                        },
+                                        Value::Nil => {
+                                            result = self.compute(&mut std::iter::once(right).peekable(), env.clone());
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        },
+                        _ => {
+                            
+                        }
+                    }
+                }
+
             },
             Expr::Symbol(s) => {
                 let class_opt = {
