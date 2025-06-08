@@ -1,0 +1,7 @@
+(var day (parse (ask "Enter the number of a week day : ")))
+(print (match day 
+    ((range 1 6) "Working")
+    (6 "First rest day")
+    (7 "Grand prix day")
+    (_ "Nothing")
+))
