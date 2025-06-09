@@ -5,7 +5,6 @@ use std::rc::Rc;
 use crate::core::annotation::Annotation;
 use crate::core::env::Env;
 use crate::core::parser::Expr;
-use crate::core::pattern::Pattern;
 use crate::core::stdlib::{NativeFunction, Stdlib};
 use crate::core::value::Value;
 
@@ -317,29 +316,25 @@ impl Interpreter {
                 if let Some(value_expr) = value_expr_option {
                     let value = self.compute(&mut std::iter::once(value_expr).peekable(), env.clone());
                     match value {
-                        Value::Array(arr) => {},
+                        Value::Array(_arr) => {},
                         Value::Number(n) => {
                             while let Some(expr) = args.next() {
                                 if let Expr::List(case) = expr {
                                     let left = case.get(0).unwrap();
                                     let right = case.get(1).unwrap();
-                                    match self.compute(&mut std::iter::once(left).peekable(), env.clone()) {
-                                        Value::Array(arr) => {
-                                            for a in arr {
-                                                if let Value::Number(i) = a {
-                                                    if i == n {
-                                                        result = self.compute(&mut std::iter::once(right).peekable(), env.clone());
-                                                    }
-                                                }
-                                            }
-                                        },
-                                        Value::Number(l) => {
-                                            if l == n {
+                                    match left {
+                                        Expr::Number(l) => {
+                                            if *l == n {
                                                 result = self.compute(&mut std::iter::once(right).peekable(), env.clone());
                                             }
                                         },
-                                        Value::Nil => {
-                                            result = self.compute(&mut std::iter::once(right).peekable(), env.clone());
+                                        Expr::List(_cond) => {
+                                            let potential_bool = self.compute(&mut std::iter::once(left).peekable(), env.clone());
+                                            if let Value::Bool(b) = potential_bool {
+                                                if b {
+                                                    result = self.compute(&mut std::iter::once(right).peekable(), env.clone());
+                                                }
+                                            }
                                         }
                                         _ => {}
                                     }

@@ -308,7 +308,7 @@ impl Stdlib {
     }
     fn random_functions() -> HashMap<String, Value> {
         let mut map = HashMap::new();
-        map.insert("rand".to_string(), Value::NativeFunction(NativeFunction::Pure(|args| {
+        map.insert("rand".to_string(), Value::NativeFunction(NativeFunction::Pure(|_args| {
             let mut rng = rand::rng();
             Value::Number(rng.random())
         })));
